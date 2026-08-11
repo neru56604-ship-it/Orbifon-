@@ -6,12 +6,15 @@ use crate::ws::message::ConnectedUser;
 #[derive(Clone)]
 pub struct WsState {
     // Key: "dm:{user1_id}:{user2_id}" or "hot_town:{channel_id}"
-    // Value: Vec of connected users in that channel
+    // Value: Vec of connected users in that channel (on THIS server)
     pub channels: Arc<RwLock<HashMap<String, Vec<ConnectedUser>>>>,
     
     // Key: user_id
-    // Value: sender to that user's WebSocket
+    // Value: sender to that user's WebSocket (on THIS server)
     pub user_senders: Arc<RwLock<HashMap<u64, mpsc::UnboundedSender<String>>>>,
+    
+    // Connection count for monitoring
+    pub total_connections: Arc<RwLock<u64>>,
 }
 
 impl WsState {
@@ -19,6 +22,7 @@ impl WsState {
         Self {
             channels: Arc::new(RwLock::new(HashMap::new())),
             user_senders: Arc::new(RwLock::new(HashMap::new())),
+            total_connections: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -33,6 +37,15 @@ impl WsState {
         
         let mut senders = self.user_senders.write().await;
         senders.insert(user.user_id, sender);
+        
+        let mut total = self.total_connections.write().await;
+        *total += 1;
+        
+        tracing::info!(
+            "User connected: {} (total: {})",
+            user.user_id,
+            *total
+        );
     }
 
     pub async fn remove_user_from_channel(
@@ -47,6 +60,17 @@ impl WsState {
         
         let mut senders = self.user_senders.write().await;
         senders.remove(&user_id);
+        
+        let mut total = self.total_connections.write().await;
+        if *total > 0 {
+            *total -= 1;
+        }
+        
+        tracing::info!(
+            "User disconnected: {} (total: {})",
+            user_id,
+            *total
+        );
     }
 
     pub async fn get_channel_users(&self, channel_key: &str) -> Vec<ConnectedUser> {
@@ -86,5 +110,9 @@ impl WsState {
         } else {
             false
         }
+    }
+    
+    pub async fn get_total_connections(&self) -> u64 {
+        *self.total_connections.read().await
     }
 }
