@@ -1,10 +1,15 @@
+mod audit_log;
 mod auth;
 mod config;
+mod content_safety;
 mod db;
 mod error;
 mod feed;
 mod hot_town;
+mod moderation;
 mod models;
+mod rate_limit;
+mod reputation;
 mod routes;
 
 use sqlx::MySqlPool;
